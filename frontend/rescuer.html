@@ -9,6 +9,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script> const API_BASE='http://localhost:4000/api'; </script>
 <script src="auth.js"></script>
+<script src="auth-ui.js"></script>
 </head>
 <body>
 <div class="container">
@@ -64,9 +65,8 @@
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 const el = id => document.getElementById(id);
 
-function getToken(){ return localStorage.getItem('eco_token'); }
 function renderProfile(){
-  const t = getToken();
+  const t = localStorage.getItem('eco_token');
   el('profileArea').innerText = t ? 'Signed in' : 'Not signed in';
 }
 renderProfile();
@@ -79,10 +79,13 @@ map.setMaxBounds(bounds);
 
 map.on('click', function(e){
   const lat = e.latlng.lat, lon = e.latlng.lng;
-  let token = getToken();
-  if(!token){ alert('Please login (auth required)'); return; }
-  // set rescuer location on backend via push subscribe (or local store by calling /api/rescuers if implemented)
-  alert('Location set locally for demo. You can now accept pickups near this point.');
+  const t = localStorage.getItem('eco_token');
+  if(!t){ EcoAuthUI.showLogin(); return; }
+  // For demo store location locally
+  const obj = JSON.parse(localStorage.getItem('eco_profile') || '{}');
+  obj.lat = lat; obj.lon = lon;
+  localStorage.setItem('eco_profile', JSON.stringify(obj));
+  alert('Location set locally for demo');
 });
 
 let markers = L.layerGroup().addTo(map);
@@ -108,14 +111,14 @@ async function loadAvailable(){
   });
 }
 window.acceptFromMap = async function(id){
-  const t = getToken(); if(!t){ alert('Please login'); return; }
+  const t = localStorage.getItem('eco_token'); if(!t){ EcoAuthUI.showLogin(); return; }
   const token = t;
   const claim = await fetch(API_BASE + '/listings/' + id + '/claim', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + token}, body: JSON.stringify({}) }).then(r=>r.json());
   if(claim.ok){ alert('Claimed'); loadMyPickups(); loadAvailable(); } else alert('Error:' + JSON.stringify(claim));
 };
 
 async function acceptAndSchedule(listing){
-  const t = getToken(); if(!t){ alert('Please login'); return; }
+  const t = localStorage.getItem('eco_token'); if(!t){ EcoAuthUI.showLogin(); return; }
   const token = t;
   const claim = await fetch(API_BASE + '/listings/' + listing.id + '/claim', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + token}, body: JSON.stringify({}) }).then(r=>r.json());
   if(!claim.ok){ alert('Could not claim'); return; }
@@ -130,9 +133,8 @@ async function acceptAndSchedule(listing){
 }
 
 async function loadMyPickups(){
-  const token = getToken(); if(!token){ el('myPickups').innerHTML = '<div class="small">Login to see your pickups</div>'; return; }
+  const token = localStorage.getItem('eco_token'); if(!token){ el('myPickups').innerHTML = '<div class="small">Login to see your pickups</div>'; return; }
   const all = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(d=>d.listings||[]);
-  const p = null;
   const mine = all.filter(l => l.claimedBy);
   const c = el('myPickups'); c.innerHTML='';
   if(!mine.length){ c.innerHTML = '<div class="small">No claimed pickups</div>'; return; }
@@ -150,7 +152,7 @@ async function loadMyPickups(){
 }
 
 async function confirmWithQR(listing){
-  const token = getToken(); if(!token){ alert('Please login'); return; }
+  const token = localStorage.getItem('eco_token'); if(!token){ EcoAuthUI.showLogin(); return; }
   const tk = prompt('Paste QR token from donor (or token shown on donor page)');
   if(!tk) return;
   const r = await fetch(API_BASE + '/listings/' + listing.id + '/confirm-qr', {
@@ -164,7 +166,7 @@ async function confirmWithQR(listing){
 el('backHome').addEventListener('click', ()=> location.href='index.html');
 
 el('optimizeBtn').addEventListener('click', async ()=>{
-  const token = getToken(); if(!token){ alert('Login to optimize'); return; }
+  const token = localStorage.getItem('eco_token'); if(!token){ EcoAuthUI.showLogin(); return; }
   const all = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(d=>d.listings||[]);
   const mine = all.filter(l => l.claimedBy);
   if(!mine.length){ el('routeResult').innerText = 'No pickups to optimize'; return; }
@@ -175,6 +177,8 @@ el('optimizeBtn').addEventListener('click', async ()=>{
   const ids = resp.route.map(x => x.id).join(' → ');
   el('routeResult').innerText = 'Optimized: ' + ids + ` (≈ ${resp.totalKm ? resp.totalKm + ' km' : ''})`;
 });
+
+window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyPickups(); loadAvailable(); });
 
 loadAvailable();
 loadMyPickups();
