@@ -1,0 +1,122 @@
+{
+  "users": [
+    {
+      "id": "user_wrhyOHAm",
+      "name": "Demo Donor",
+      "email": "donor@example.com",
+      "password": "$2a$08$laT4W5lNJSOHu5MVXZBMe.oF6xFr8KAUgGy5Qozu500QD7SXBzTZW",
+      "role": "donor"
+    },
+    {
+      "id": "user_39IvZM8r",
+      "name": "Demo Rescuer",
+      "email": "rescuer@example.com",
+      "password": "$2a$08$bjWW2GECEkD94ZDmjOZoW.Z/196bx.7Cr/wLK4MQhtimBskb1hwyW",
+      "role": "rescuer"
+    }
+  ],
+  "donors": [
+    {
+      "id": "donor_demo",
+      "name": "Demo Donor",
+      "phone": "+254700000001",
+      "subscription": "free",
+      "reputation": 4.8
+    }
+  ],
+  "rescuers": [
+    {
+      "id": "rescuer_demo",
+      "userId": "user_39IvZM8r",
+      "name": "Demo Rescuer",
+      "phone": "+254700000002",
+      "lat": -1.28333,
+      "lon": 36.81667,
+      "pushSubscriptions": []
+    }
+  ],
+  "listings": [
+    {
+      "id": "listing_tYr8Moi9",
+      "donorId": "donor_demo",
+      "foodType": "Fresh Mangoes",
+      "quantityKg": 12,
+      "category": "Produce",
+      "perishabilityTag": "Perishable - 2hrs",
+      "urgencyColor": "red",
+      "lat": -1.2146,
+      "lon": 36.881,
+      "address": "Kilimani, Nairobi",
+      "timeWindow": "",
+      "status": "available",
+      "claimedBy": null,
+      "createdAt": 1756671536603,
+      "claimedAt": null,
+      "completedAt": null,
+      "qrToken": "GBzUz3v8Lo_VSGPS"
+    },
+    {
+      "id": "listing_chTN5-HP",
+      "donorId": "donor_demo",
+      "foodType": "Cooked Chapati",
+      "quantityKg": 15,
+      "category": "Produce",
+      "perishabilityTag": "Perishable - 2hrs",
+      "urgencyColor": "red",
+      "lat": -1.2921,
+      "lon": 36.8219,
+      "address": "CBD, Nairobi",
+      "timeWindow": "",
+      "status": "available",
+      "claimedBy": null,
+      "createdAt": 1756671536603,
+      "claimedAt": null,
+      "completedAt": null,
+      "qrToken": "GC4K594gVj0pvwv7"
+    },
+    {
+      "id": "listing_3zDyp2m6",
+      "donorId": "donor_demo",
+      "foodType": "Rice Bags",
+      "quantityKg": 40,
+      "category": "Produce",
+      "perishabilityTag": "Non-Perishable",
+      "urgencyColor": "green",
+      "lat": -1.1,
+      "lon": 36.76,
+      "address": "Kiambu Town",
+      "timeWindow": "",
+      "status": "available",
+      "claimedBy": null,
+      "createdAt": 1756671536603,
+      "claimedAt": null,
+      "completedAt": null,
+      "qrToken": "Kt2dlnxvKeJ8bNwN"
+    },
+    {
+      "id": "listing_P1s5pp2E",
+      "donorId": "donor_demo",
+      "foodType": "Vegetables",
+      "quantityKg": 10,
+      "category": "Produce",
+      "perishabilityTag": "Stable - 24hrs",
+      "urgencyColor": "orange",
+      "lat": -1.22,
+      "lon": 36.9,
+      "address": "Westlands",
+      "timeWindow": "",
+      "status": "available",
+      "claimedBy": null,
+      "createdAt": 1756671536603,
+      "claimedAt": null,
+      "completedAt": null,
+      "qrToken": "BnqeNEBS_PLe_N0K"
+    }
+  ],
+  "intasend_bookings": [],
+  "impact": {
+    "day": "2025-08-31",
+    "totalKg": 0,
+    "pickups": 0
+  }
+}

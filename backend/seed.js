@@ -1,4 +1,63 @@
-// seed.js - robust seeding that ensures db.json exists with defaults before using lowdb
+const { init, db: dbRef } = require('./db');
+const { init, db: dbRef } = require('./db');
+
+(async () => {
+  try {
+    // pass the default data into init
+    await init(defaultData);
+
+    // after init, require DB reference from the exported module
+    const { db } = require('./db');
+
+    console.log('Seeding started...');
+    // ... your seeding logic that uses `db` ...
+    // example:
+    // db.data.users.push({ id: 1, name: 'Admin' });
+    // await db.write();
+
+    console.log('Seeding completed.');
+  } catch (err) {
+    console.error('Seeding failed:', err);
+  }
+})();
+// default structure used when creating db.json
+// const defaultData = { ... } // Removed duplicate declaration
+// Modified db.js to export init function that accepts defaultData
+const { Low, JSONFile } = require('lowdb');
+const path = require('path');
+
+let db;
+
+// initialize DB, require caller to provide defaultData to avoid lowdb error
+async function init(defaultData = {}) {
+    const adapter = new JSONFile(DB_FILE);
+    // pass defaultData into Low constructor
+    db = new Low(adapter, defaultData);
+    await db.read();
+    db.data ||= defaultData;
+    await db.write();
+}
+
+module.exports = { db, init };
+(async () => {
+  try {
+    // pass the default data into init
+    await init(defaultData);
+
+    // after init, require DB reference from the exported module
+    const { db } = require('./db');
+
+    console.log('Seeding started...');
+    // ... your seeding logic that uses `db` ...
+    // example:
+    // db.data.users.push({ id: 1, name: 'Admin' });
+    // await db.write();
+
+    console.log('Seeding completed.');
+  } catch (err) {
+    console.error('Seeding failed:', err);
+  }
+})();// seed.js - robust seeding that ensures db.json exists with defaults before using lowdb
 // Usage: node seed.js
 const fs = require('fs');
 const path = require('path');
