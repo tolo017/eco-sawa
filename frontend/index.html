@@ -3,64 +3,163 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EcoSawa — Last-Mile Food Rescue</title>
+  <title>EcoSawa — Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.json" />
   <script> const API_BASE = 'http://localhost:4000/api'; </script>
+  <script src="auth.js"></script>
 </head>
 <body>
   <div class="container">
-    <div class="card header">
-      <div>
-        <h2>EcoSawa</h2>
-        <div class="small">Turn food surplus into resource — real-time pickups</div>
+    <div class="app-header">
+      <div class="brand">
+        <div class="logo">ES</div>
+        <div>
+          <div style="font-weight:800">EcoSawa</div>
+          <div class="small-muted">Real-time last-mile food rescue</div>
+        </div>
       </div>
-      <div>
-        <a href="donor.html" class="btn">Donor</a>
-        <a href="rescuer.html" class="btn secondary">Rescuer</a>
+
+      <div class="app-actions">
+        <div id="profileArea" class="profile-bubble small-muted">Not signed in</div>
+        <button class="btn ghost" id="openAuth">Sign In / Register</button>
       </div>
     </div>
 
-    <div class="card" id="impactCard">
-      <h3>Impact</h3>
-      <div id="impact">Loading...</div>
-    </div>
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="section-title">Impact</div><div class="small">Real-time metrics</div></div>
+            <div><button class="btn" id="goDonor">Donor Dashboard</button></div>
+          </div>
 
-    <div class="card">
-      <h3>Available Pickups</h3>
-      <div id="listings">Loading...</div>
+          <div style="margin-top:12px" id="impactBlock">
+            <div class="kpi-row" style="margin-bottom:12px">
+              <div class="kpi"><div class="num" id="kpiKg">— kg</div><div class="label">Total Food Diverted</div></div>
+              <div class="kpi"><div class="num" id="kpiPickups">—</div><div class="label">Pickups Today</div></div>
+              <div class="kpi"><div class="num" id="kpiDonors">—</div><div class="label">Active Donors</div></div>
+            </div>
+            <div class="small" id="impactNote">Updated in real-time</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="section-title">Available Pickups</div>
+          <div id="availableList">Loading pickups…</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="section-title">Quick Actions</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn" id="btnCreateListing">Create Listing</button>
+            <button class="btn ghost" id="btnRescuer">Rescuer Dashboard</button>
+            <button class="btn" id="btnRefresh">Refresh</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="section-title">Announcements</div>
+          <div class="small">Pilot focused on Nairobi & Kiambu. Prioritize perishable items.</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script>
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log('SW failed',e));
-    async function loadImpact(){
-      const r = await fetch(API_BASE + '/impact').then(r=>r.json());
-      const imp = r.impact;
-      document.getElementById('impact').innerHTML = `Total Food Diverted: <strong>${imp.totalKg} kg</strong> | Pickups Today: <strong>${imp.pickupsToday}</strong>`;
-    }
-    async function loadListings(){
-      const r = await fetch(API_BASE + '/listings').then(r=>r.json());
-      const container = document.getElementById('listings');
-      container.innerHTML = '';
-      if(!r.listings.length) container.innerHTML = '<div class="small">No active pickups</div>';
-      r.listings.forEach(l=>{
-        const el = document.createElement('div');
-        el.className='listing';
-        const left = document.createElement('div');
-        left.innerHTML = `<div><strong>${l.foodType}</strong> — ${l.quantityKg}kg <span class="small">(${l.category})</span></div><div class="small">${l.address || 'No address'}</div>`;
-        const right = document.createElement('div');
-        const tag = document.createElement('span');
-        tag.className = 'tag ' + (l.urgencyColor || 'green');
-        tag.innerText = l.perishabilityTag || '';
-        right.appendChild(tag);
-        el.appendChild(left);
-        el.appendChild(right);
-        container.appendChild(el);
-      });
-    }
-    loadImpact(); loadListings();
-    setInterval(()=>{ loadImpact(); loadListings(); }, 8000);
-  </script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+const el = id => document.getElementById(id);
+
+function renderProfileUI(){
+  const t = localStorage.getItem('eco_token');
+  const area = el('profileArea');
+  if (!t) area.innerText = 'Not signed in';
+  else area.innerText = 'Signed in';
+}
+renderProfileUI();
+
+async function openAuthPrompt(){
+  const mode = prompt('Type "login" or "register"').trim();
+  if (!mode) return;
+  if (mode === 'register') {
+    const name = prompt('Name:') || 'User';
+    const email = prompt('Email:');
+    const pwd = prompt('Password:');
+    const role = prompt('Role (donor/rescuer):') || 'rescuer';
+    const r = await register(name,email,pwd,role);
+    if (r.token) { alert('Registered'); renderProfileUI(); }
+    else alert('Error: ' + (r.error || JSON.stringify(r)));
+  } else {
+    const email = prompt('Email:');
+    const pwd = prompt('Password:');
+    const r = await login(email,pwd);
+    if (r.token) { alert('Logged in'); renderProfileUI(); initPushSubscription(); }
+    else alert('Error: ' + (r.error || JSON.stringify(r)));
+  }
+}
+
+async function loadImpact(){
+  const r = await fetch(API_BASE + '/impact').then(r=>r.json()).catch(()=>null);
+  if(!r || !r.impact) {
+    el('kpiKg').innerText = '— kg';
+    el('kpiPickups').innerText = '—';
+    el('kpiDonors').innerText = '—';
+    return;
+  }
+  el('kpiKg').innerText = r.impact.totalKg + ' kg';
+  el('kpiPickups').innerText = r.impact.pickupsToday;
+  const donors = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(data=> { const ds = (data.listings||[]).map(l=>l.donorId); return new Set(ds).size; }).catch(()=>0);
+  el('kpiDonors').innerText = donors;
+}
+
+async function loadAvailable(){
+  const r = await fetch(API_BASE + '/listings').then(r=>r.json()).catch(()=>({ listings: [] }));
+  const c = el('availableList');
+  c.innerHTML = '';
+  if(!r.listings || !r.listings.length){ c.innerHTML = '<div class="small">No pickups available</div>'; return; }
+  r.listings.forEach(l=>{
+    const div = document.createElement('div'); div.className='listing';
+    const left = document.createElement('div'); left.className='left';
+    left.innerHTML = `<div><div class="pill ${l.urgencyColor}">${l.perishabilityTag}</div></div><div style="margin-left:8px"><div style="font-weight:700">${l.foodType} — ${l.quantityKg}kg</div><div class="small">${l.address || ''}</div></div>`;
+    const right = document.createElement('div');
+    const btn = document.createElement('button'); btn.className='btn ghost'; btn.innerText='View';
+    btn.onclick = ()=> { localStorage.setItem('eco_viewListing', JSON.stringify(l)); location.href = 'donor.html'; };
+    right.appendChild(btn);
+    div.appendChild(left); div.appendChild(right);
+    c.appendChild(div);
+  });
+}
+
+el('btnRefresh').addEventListener('click', ()=>{ loadImpact(); loadAvailable(); });
+el('btnCreateListing').addEventListener('click', ()=>{ location.href='donor.html'; });
+el('btnRescuer').addEventListener('click', ()=>{ location.href='rescuer.html'; });
+el('goDonor').addEventListener('click', ()=>{ location.href='donor.html'; });
+document.getElementById('openAuth').addEventListener('click', openAuthPrompt);
+
+async function initPushSubscription(){
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const resp = await fetch(API_BASE + '/push/vapidPublicKey');
+    const data = await resp.json();
+    const vapidPublicKey = data.publicKey;
+    const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: convertedVapidKey });
+    await fetch(API_BASE + '/push/subscribe', { method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + localStorage.getItem('eco_token')}, body: JSON.stringify({ subscription: sub, name: 'Rescuer' }) });
+    console.log('Push subscribed');
+  } catch (e) { console.warn('Push init failed', e); }
+}
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+loadImpact(); loadAvailable();
+setInterval(()=>{ loadImpact(); loadAvailable(); }, 10000);
+</script>
 </body>
 </html>
