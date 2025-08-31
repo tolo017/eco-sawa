@@ -1,0 +1,45 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+
+# dotenv
+.env
+.env.local
+.env.*.local
+
+# SQLite DB
+/backend/database.sqlite
+database.sqlite
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Build / temp
+dist/
+build/
+.tmp/
+
+# Frontend service worker cache (optional)
+.sw-cache/
+
+# Mac / Linux thumbnail cache
+._*
+
+# Generated QR images (if any)
+frontend/qrs/
