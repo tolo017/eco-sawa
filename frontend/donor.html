@@ -2,86 +2,188 @@
 <html>
 <head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>EcoSawa — Donor</title>
+<title>EcoSawa — Donor Dashboard</title>
 <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.json" />
 <script> const API_BASE='http://localhost:4000/api'; </script>
+<script src="auth.js"></script>
 </head>
 <body>
 <div class="container">
-  <div class="card header">
-    <h2>Donor — Create Listing</h2>
-    <a href="index.html" class="btn">Home</a>
-  </div>
-
-  <div class="card">
-    <form id="listingForm">
-      <div><label>Donor ID (optional): </label><input id="donorId" /></div><br/>
-      <div><label>Food Type: </label><input id="foodType" required/></div><br/>
-      <div><label>Quantity (kg): </label><input id="quantity" type="number" value="5" /></div><br/>
-      <div><label>Category: </label>
-        <select id="category"><option>Prepared</option><option>Produce</option><option>Packaged</option></select>
-      </div><br/>
-      <div><label>Perishability Tag: </label>
-        <select id="perishabilityTag">
-          <option>Perishable - 2hrs</option>
-          <option>Stable - 24hrs</option>
-          <option>Non-Perishable</option>
-        </select>
-      </div><br/>
-      <div><label>Address: </label><input id="address" /></div><br/>
-      <div><label>Latitude: <input id="lat" /></label> <label>Longitude: <input id="lon" /></label></div><br/>
-      <button class="btn" type="submit">List Pickup</button>
-    </form>
-
-    <div style="margin-top:12px">
-      <div id="qrWrap" class="small"></div>
+  <div class="app-header">
+    <div class="brand">
+      <div class="logo">ES</div>
+      <div>
+        <div style="font-weight:800">Donor Dashboard</div>
+        <div class="small-muted">Create listings & manage pickups</div>
+      </div>
+    </div>
+    <div class="app-actions">
+      <div id="profileArea" class="profile-bubble small-muted"></div>
+      <button class="btn ghost" id="backHome">Home</button>
     </div>
   </div>
 
-  <div class="card">
-    <h3>Your Reputation</h3>
-    <div id="rep">Enter your donor id above and click Get Reputation.</div>
-    <button class="btn" id="getRep">Get Reputation</button>
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="section-title">Create Listing</div>
+        <div class="small">Fill details & set pickup schedule</div>
+        <div style="margin-top:12px">
+          <div style="display:flex;gap:8px">
+            <div class="col" style="flex:1">
+              <label>Food type</label><input id="foodType" class="input" />
+            </div>
+            <div style="width:120px">
+              <label>Qty (kg)</label><input id="quantity" class="input" type="number" value="5" />
+            </div>
+          </div>
+          <div style="margin-top:8px" class="form-row">
+            <div class="col">
+              <label>Category</label>
+              <select id="category" class="input"><option>Prepared</option><option>Produce</option><option>Packaged</option></select>
+            </div>
+            <div style="width:180px">
+              <label>Perishability</label>
+              <select id="perishabilityTag" class="input"><option>Perishable - 2hrs</option><option>Stable - 24hrs</option><option>Non-Perishable</option></select>
+            </div>
+          </div>
+
+          <div style="margin-top:8px">
+            <label>Pickup window start</label>
+            <input id="pickupStart" type="datetime-local" class="input" />
+            <div style="height:8px"></div>
+            <label>Pickup window end</label>
+            <input id="pickupEnd" type="datetime-local" class="input" />
+          </div>
+
+          <div style="margin-top:8px">
+            <label>Address</label>
+            <input id="address" class="input" />
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn" id="createListingBtn">List Pickup</button>
+            <button class="btn ghost" id="showMyListings">My Listings</button>
+          </div>
+
+          <div id="createdQR" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="section-title">My Listings</div>
+        <div id="myListings">No listings yet</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="section-title">Reputation & Impact</div>
+        <div id="repBlock">
+          <div class="small">Reputation: <strong id="repScore">—</strong></div>
+          <div style="height:12px"></div>
+          <div class="small">Impact</div>
+          <div style="margin-top:8px"><div class="small" id="impactMini">—</div></div>
+        </div>
+      </div>
+
+      <div class="card map-card" style="margin-top:12px">
+        <div class="section-title">Map — quick locate</div>
+        <div id="map" style="height:240px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
-<script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log('SW failed',e));
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-async function postDonorCreateOrGet(id){
-  const resp = await fetch(API_BASE + '/donors', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ id, name: 'Donor ' + (id||'new') })
-  }).then(r=>r.json());
-  return resp.donor;
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+const el = id => document.getElementById(id);
+
+function getToken(){ return localStorage.getItem('eco_token'); }
+function getProfileLocal(){ try { return JSON.parse(localStorage.getItem('eco_profile')||'null'); } catch { return null; } }
+
+async function ensureDonorAuth(){
+  if (!getToken()) {
+    alert('Please login or register first (you will be prompted).');
+    await (async ()=> {
+      const mode = prompt('Type "login" or "register"');
+      if (!mode) return;
+      if (mode === 'register') {
+        const name = prompt('Name:') || 'Donor';
+        const email = prompt('Email:');
+        const pwd = prompt('Password:');
+        const r = await register(name,email,pwd,'donor');
+        if (!r.token) alert('Registration failed: '+JSON.stringify(r));
+      } else {
+        const email = prompt('Email:'); const pwd = prompt('Password:');
+        const r = await login(email,pwd);
+        if (!r.token) alert('Login failed: '+JSON.stringify(r));
+      }
+    })();
+  }
+  renderProfile();
 }
 
-document.getElementById('listingForm').addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  const donorId = document.getElementById('donorId').value || undefined;
-  const donor = await postDonorCreateOrGet(donorId);
+function renderProfile(){
+  const t = localStorage.getItem('eco_token');
+  const area = el('profileArea');
+  area.innerText = t ? 'Signed in' : 'Not signed in';
+}
+
+renderProfile();
+
+const center = [-1.28333, 36.81667];
+const map = L.map('map').setView(center, 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+el('createListingBtn').addEventListener('click', async ()=>{
+  await ensureDonorAuth();
+  const token = getToken();
   const payload = {
-    donorId: donor.id,
-    foodType: document.getElementById('foodType').value,
-    quantityKg: Number(document.getElementById('quantity').value) || 0,
-    category: document.getElementById('category').value,
-    perishabilityTag: document.getElementById('perishabilityTag').value,
-    location: { lat: Number(document.getElementById('lat').value) || 0, lon: Number(document.getElementById('lon').value) || 0, address: document.getElementById('address').value }
+    donorId: 'donor_' + Math.random().toString(36).slice(2,8),
+    foodType: el('foodType').value || 'Surplus',
+    quantityKg: Number(el('quantity').value) || 0,
+    category: el('category').value,
+    perishabilityTag: el('perishabilityTag').value,
+    location: { lat: (map.getCenter().lat || 0), lon: (map.getCenter().lng || 0), address: el('address').value || '' },
+    timeWindow: (el('pickupStart').value && el('pickupEnd').value) ? (el('pickupStart').value + '/' + el('pickupEnd').value) : ''
   };
-  const r = await fetch(API_BASE + '/listings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
-  alert('Listing created: ' + r.listing.id);
-  // Show QR for pickup confirmation
-  document.getElementById('qrWrap').innerHTML = `<div>QR for pickup confirmation (share/print):</div><img class="qr" src="${r.listing.qrData}" alt="QR"/><div class="small">QR token (for testing): <code>${r.listing.qrToken}</code></div>`;
+  const r = await fetch(API_BASE + '/listings', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + token}, body: JSON.stringify(payload) }).then(r=>r.json());
+  if(r.ok){
+    el('createdQR').innerHTML = `<div class="small">Listing created — ID: ${r.listing.id}</div><img class="qr" src="${r.listing.qrData}" /><div class="small">Token: <code>${r.listing.qrToken}</code></div>`;
+    loadMyListings();
+  } else alert('Error: ' + (r.error || JSON.stringify(r)));
 });
 
-document.getElementById('getRep').addEventListener('click', async ()=>{
-  const id = document.getElementById('donorId').value;
-  if(!id){ alert('Enter donor id'); return; }
-  const r = await fetch(API_BASE + '/donors/' + id + '/reputation').then(r=>r.json());
-  document.getElementById('rep').innerHTML = `<strong>${r.reputation}/5</strong>`;
-});
+async function loadMyListings(){
+  const token = getToken();
+  const all = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(d=>d.listings||[]);
+  // if token present, try to decode user role (not full user mapping here) - we show local created
+  const mine = all.filter(l => l.donorId && l.donorId.startsWith('donor_'));
+  const c = el('myListings'); c.innerHTML='';
+  if(!mine.length) { c.innerHTML = '<div class="small">No listings</div>'; return; }
+  mine.forEach(l => {
+    const d = document.createElement('div'); d.className='listing';
+    d.innerHTML = `<div><div style="font-weight:700">${l.foodType} — ${l.quantityKg}kg</div><div class="small">${l.address || ''} ${l.timeWindow ? ' | ' + l.timeWindow : ''}</div></div>`;
+    const right = document.createElement('div');
+    const rep = document.createElement('div'); rep.className='small'; rep.innerText = `Status: ${l.status}`;
+    right.appendChild(rep);
+    d.appendChild(right);
+    c.appendChild(d);
+  });
+  const imp = await fetch(API_BASE + '/impact').then(r=>r.json()).then(x=>x.impact).catch(()=>({ totalKg:0, pickupsToday:0 }));
+  el('repScore').innerText = '—/5';
+  el('impactMini').innerText = `${imp.totalKg} kg diverted | ${imp.pickupsToday} pickups today`;
+}
 
-// Simulate IntaSend create booking (button optionally could be added)
+el('backHome').addEventListener('click', ()=> location.href='index.html');
+el('showMyListings').addEventListener('click', loadMyListings);
+
+loadMyListings();
 </script>
-</body></html>
+</body>
+</html>
