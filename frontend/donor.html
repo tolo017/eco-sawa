@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EcoSawa — Donor</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="manifest" href="manifest.json" />
+<script> const API_BASE='http://localhost:4000/api'; </script>
+</head>
+<body>
+<div class="container">
+  <div class="card header">
+    <h2>Donor — Create Listing</h2>
+    <a href="index.html" class="btn">Home</a>
+  </div>
+
+  <div class="card">
+    <form id="listingForm">
+      <div><label>Donor ID (optional): </label><input id="donorId" /></div><br/>
+      <div><label>Food Type: </label><input id="foodType" required/></div><br/>
+      <div><label>Quantity (kg): </label><input id="quantity" type="number" value="5" /></div><br/>
+      <div><label>Category: </label>
+        <select id="category"><option>Prepared</option><option>Produce</option><option>Packaged</option></select>
+      </div><br/>
+      <div><label>Perishability Tag: </label>
+        <select id="perishabilityTag">
+          <option>Perishable - 2hrs</option>
+          <option>Stable - 24hrs</option>
+          <option>Non-Perishable</option>
+        </select>
+      </div><br/>
+      <div><label>Address: </label><input id="address" /></div><br/>
+      <div><label>Latitude: <input id="lat" /></label> <label>Longitude: <input id="lon" /></label></div><br/>
+      <button class="btn" type="submit">List Pickup</button>
+    </form>
+
+    <div style="margin-top:12px">
+      <div id="qrWrap" class="small"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Your Reputation</h3>
+    <div id="rep">Enter your donor id above and click Get Reputation.</div>
+    <button class="btn" id="getRep">Get Reputation</button>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log('SW failed',e));
+
+async function postDonorCreateOrGet(id){
+  const resp = await fetch(API_BASE + '/donors', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id, name: 'Donor ' + (id||'new') })
+  }).then(r=>r.json());
+  return resp.donor;
+}
+
+document.getElementById('listingForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const donorId = document.getElementById('donorId').value || undefined;
+  const donor = await postDonorCreateOrGet(donorId);
+  const payload = {
+    donorId: donor.id,
+    foodType: document.getElementById('foodType').value,
+    quantityKg: Number(document.getElementById('quantity').value) || 0,
+    category: document.getElementById('category').value,
+    perishabilityTag: document.getElementById('perishabilityTag').value,
+    location: { lat: Number(document.getElementById('lat').value) || 0, lon: Number(document.getElementById('lon').value) || 0, address: document.getElementById('address').value }
+  };
+  const r = await fetch(API_BASE + '/listings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
+  alert('Listing created: ' + r.listing.id);
+  // Show QR for pickup confirmation
+  document.getElementById('qrWrap').innerHTML = `<div>QR for pickup confirmation (share/print):</div><img class="qr" src="${r.listing.qrData}" alt="QR"/><div class="small">QR token (for testing): <code>${r.listing.qrToken}</code></div>`;
+});
+
+document.getElementById('getRep').addEventListener('click', async ()=>{
+  const id = document.getElementById('donorId').value;
+  if(!id){ alert('Enter donor id'); return; }
+  const r = await fetch(API_BASE + '/donors/' + id + '/reputation').then(r=>r.json());
+  document.getElementById('rep').innerHTML = `<strong>${r.reputation}/5</strong>`;
+});
+
+// Simulate IntaSend create booking (button optionally could be added)
+</script>
+</body></html>
