@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json" />
 <script> const API_BASE='http://localhost:4000/api'; </script>
 <script src="auth.js"></script>
+<script src="auth-ui.js"></script>
 </head>
 <body>
 <div class="container">
@@ -103,46 +104,28 @@
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 const el = id => document.getElementById(id);
 
-function getToken(){ return localStorage.getItem('eco_token'); }
-function getProfileLocal(){ try { return JSON.parse(localStorage.getItem('eco_profile')||'null'); } catch { return null; } }
-
-async function ensureDonorAuth(){
-  if (!getToken()) {
-    alert('Please login or register first (you will be prompted).');
-    await (async ()=> {
-      const mode = prompt('Type "login" or "register"');
-      if (!mode) return;
-      if (mode === 'register') {
-        const name = prompt('Name:') || 'Donor';
-        const email = prompt('Email:');
-        const pwd = prompt('Password:');
-        const r = await register(name,email,pwd,'donor');
-        if (!r.token) alert('Registration failed: '+JSON.stringify(r));
-      } else {
-        const email = prompt('Email:'); const pwd = prompt('Password:');
-        const r = await login(email,pwd);
-        if (!r.token) alert('Login failed: '+JSON.stringify(r));
-      }
-    })();
-  }
-  renderProfile();
-}
-
 function renderProfile(){
   const t = localStorage.getItem('eco_token');
-  const area = el('profileArea');
-  area.innerText = t ? 'Signed in' : 'Not signed in';
+  el('profileArea').innerText = t ? 'Signed in' : 'Not signed in';
 }
-
 renderProfile();
+
+async function ensureDonorAuth(){
+  if (!localStorage.getItem('eco_token')) {
+    EcoAuthUI.showLogin();
+    return false;
+  }
+  return true;
+}
 
 const center = [-1.28333, 36.81667];
 const map = L.map('map').setView(center, 11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 el('createListingBtn').addEventListener('click', async ()=>{
-  await ensureDonorAuth();
-  const token = getToken();
+  const ok = await ensureDonorAuth();
+  if (!ok) return;
+  const token = localStorage.getItem('eco_token');
   const payload = {
     donorId: 'donor_' + Math.random().toString(36).slice(2,8),
     foodType: el('foodType').value || 'Surplus',
@@ -160,9 +143,7 @@ el('createListingBtn').addEventListener('click', async ()=>{
 });
 
 async function loadMyListings(){
-  const token = getToken();
   const all = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(d=>d.listings||[]);
-  // if token present, try to decode user role (not full user mapping here) - we show local created
   const mine = all.filter(l => l.donorId && l.donorId.startsWith('donor_'));
   const c = el('myListings'); c.innerHTML='';
   if(!mine.length) { c.innerHTML = '<div class="small">No listings</div>'; return; }
@@ -184,6 +165,7 @@ el('backHome').addEventListener('click', ()=> location.href='index.html');
 el('showMyListings').addEventListener('click', loadMyListings);
 
 loadMyListings();
+window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyListings(); });
 </script>
 </body>
 </html>
