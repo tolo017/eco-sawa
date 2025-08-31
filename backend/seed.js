@@ -1,16 +1,62 @@
-// seed.js - robust seeding for demo data
+// seed.js - robust seeding that ensures db.json exists with defaults before using lowdb
 // Usage: node seed.js
+const fs = require('fs');
 const path = require('path');
+
+const DB_FILE = path.join(__dirname, 'db.json');
+const defaultData = {
+  users: [],
+  donors: [],
+  rescuers: [],
+  listings: [],
+  intasend_bookings: [],
+  impact: { day: new Date().toISOString().slice(0,10), totalKg: 0, pickups: 0 }
+};
+
+// Ensure file exists and is valid JSON with default structure
+function ensureDbFile() {
+  try {
+    if (!fs.existsSync(DB_FILE)) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(defaultData, null, 2), { encoding: 'utf8' });
+      console.log('Created new db.json with default structure.');
+      return;
+    }
+    const raw = fs.readFileSync(DB_FILE, 'utf8');
+    try {
+      const parsed = JSON.parse(raw || '{}');
+      // ensure required keys exist
+      let changed = false;
+      for (const k of Object.keys(defaultData)) {
+        if (parsed[k] === undefined) { parsed[k] = defaultData[k]; changed = true; }
+      }
+      if (changed) {
+        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), { encoding: 'utf8' });
+        console.log('Patched db.json with missing default keys.');
+      }
+    } catch (err) {
+      // malformed JSON — back it up and write fresh
+      fs.renameSync(DB_FILE, DB_FILE + '.bak_' + Date.now());
+      fs.writeFileSync(DB_FILE, JSON.stringify(defaultData, null, 2), { encoding: 'utf8' });
+      console.log('Malformed db.json backed up and replaced with default structure.');
+    }
+  } catch (err) {
+    console.error('Failed to ensure db.json:', err);
+    process.exit(1);
+  }
+}
 
 (async () => {
   try {
-    // require after resolving path to ensure relative imports work when executed from backend/
+    ensureDbFile();
+
+    // Now require lowdb-backed db module (which expects db.json present)
     const { db, init } = require('./db');
     const { nanoid } = require('nanoid');
     const bcrypt = require('bcryptjs');
 
-    await init();
+    await init();           // lowdb init will read existing db.json
     await db.read();
+
     db.data = db.data || {};
 
     db.data.users = db.data.users || [];
@@ -87,6 +133,7 @@ const path = require('path');
     await db.write();
     console.log('Seeding complete. Demo credentials: donor@example.com / password  and rescuer@example.com / password');
     process.exit(0);
+
   } catch (err) {
     console.error('Seeding failed:', err);
     process.exit(1);
