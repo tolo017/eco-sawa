@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EcoSawa — Rescuer</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script> const API_BASE='http://localhost:4000/api'; </script>
+</head>
+<body>
+<div class="container">
+  <div class="card header">
+    <h2>Rescuer Dashboard</h2>
+    <a href="index.html" class="btn">Home</a>
+  </div>
+
+  <div class="card">
+    <form id="registerForm">
+      <div><label>Name: <input id="rName"/></label></div><br/>
+      <div><label>Phone: <input id="rPhone"/></label></div><br/>
+      <div><label>Lat: <input id="rLat"/></label> Lon: <input id="rLon"/></div><br/>
+      <button class="btn" type="submit">Register / Update Location</button>
+    </form>
+    <div class="small">Tip: click the map to pick your location (Nairobi/Kiambu area)</div>
+  </div>
+
+  <div class="card">
+    <h3>Map — Nairobi & Kiambu</h3>
+    <div id="map"></div>
+  </div>
+
+  <div class="card">
+    <h3>My Pickups</h3>
+    <div id="myPickups">None yet</div>
+    <div style="margin-top:8px"><button class="btn" id="optimizeBtn">Optimize Route for My Claimed Pickups</button></div>
+    <div id="routeResult" class="small" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log('SW failed',e));
+
+let rescuer = null;
+async function registerRescuer(){
+  const body = { name: document.getElementById('rName').value, phone: document.getElementById('rPhone').value, location: { lat: Number(document.getElementById('rLat').value) || 0, lon: Number(document.getElementById('rLon').value) || 0 } };
+  const r = await fetch(API_BASE + '/rescuers', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+  rescuer = r.rescuer;
+  loadListingsOnMap();
+  loadMyPickups();
+}
+document.getElementById('registerForm').addEventListener('submit', (e)=>{ e.preventDefault(); registerRescuer(); });
+
+/* Leaflet map */
+const nairobiCenter = [ -1.28333, 36.81667 ];
+const map = L.map('map').setView(nairobiCenter, 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+// limit to approximate Nairobi/Kiambu bounds
+const bounds = L.latLngBounds([ -1.6, 36.5 ], [ -0.9, 37.4 ]);
+map.setMaxBounds(bounds);
+let markers = L.layerGroup().addTo(map);
+
+map.on('click', function(e){
+  const lat = e.latlng.lat, lon = e.latlng.lng;
+  document.getElementById('rLat').value = lat.toFixed(6);
+  document.getElementById('rLon').value = lon.toFixed(6);
+});
+
+async function loadListingsOnMap(){
+  const r = await fetch(API_BASE + '/listings').then(r=>r.json());
+  markers.clearLayers();
+  r.listings.forEach(l => {
+    const color = l.urgencyColor === 'red' ? '#ff2b2b' : (l.urgencyColor === 'orange' ? '#ff9f1c' : '#28a745');
+    const marker = L.circleMarker([l.lat, l.lon], { color, radius:8, fillColor: color, fillOpacity:0.7 }).addTo(markers);
+    const popupContent = `<b>${l.foodType} — ${l.quantityKg}kg</b><br>${l.perishabilityTag}<br>${l.address || ''}<br/><div style="margin-top:6px"><button onclick="claimFromPopup('${l.id}')">Accept Pickup</button></div>`;
+    marker.bindPopup(popupContent);
+  });
+}
+
+async function claimFromPopup(listingId){
+  if(!rescuer){ alert('Register first'); return; }
+  const r = await fetch(API_BASE + '/listings/' + listingId + '/claim', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rescuerId: rescuer.id })
+  }).then(r=>r.json());
+  if(r.ok){ alert('Pickup claimed'); loadMyPickups(); loadListingsOnMap(); }
+  else alert('Error: ' + (r.error || ''));
+}
+
+async function loadMyPickups(){
+  const all = await fetch(API_BASE + '/listings/all').then(r=>r.json());
+  const mine = all.listings.filter(l => rescuer && l.claimedBy === rescuer.id);
+  const container = document.getElementById('myPickups'); container.innerHTML='';
+  if(!mine.length) container.innerHTML='No pickups';
+  mine.forEach(m=>{
+    const el = document.createElement('div'); el.className='listing';
+    el.innerHTML = `<div><strong>${m.foodType}</strong> ${m.quantityKg}kg <div class="small">${m.address || ''}</div></div>`;
+    const right = document.createElement('div');
+    const btnConfirm = document.createElement('button'); btnConfirm.className='btn'; btnConfirm.innerText='Confirm (QR)';
+    btnConfirm.onclick = ()=> confirmWithQR(m);
+    right.appendChild(btnConfirm);
+    el.appendChild(right);
+    container.appendChild(el);
+  });
+}
+
+async function confirmWithQR(listing){
+  if(!rescuer) { alert('Register first'); return; }
+  const token = prompt('Paste QR token (copy from donor QR or donor page)');
+  if(!token) return;
+  const r = await fetch(API_BASE + '/listings/' + listing.id + '/confirm-qr', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rescuerId: rescuer.id, token })
+  }).then(r=>r.json());
+  if(r.ok){ alert('Pickup confirmed. Thank you!'); loadMyPickups(); loadListingsOnMap(); }
+  else alert('Error: ' + (r.error || JSON.stringify(r)));
+}
+
+/* Route optimization for claimed pickups */
+document.getElementById('optimizeBtn').addEventListener('click', async ()=>{
+  const all = await fetch(API_BASE + '/listings/all').then(r=>r.json());
+  const mine = all.listings.filter(l => rescuer && l.claimedBy === rescuer.id);
+  if(mine.length === 0){ alert('No claimed pickups'); return; }
+  const listingIds = mine.map(m => m.id);
+  const resp = await fetch(API_BASE + '/route/optimize', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ rescuerLocation: { lat: Number(document.getElementById('rLat').value) || nairobiCenter[0], lon: Number(document.getElementById('rLon').value) || nairobiCenter[1] }, listingIds })
+  }).then(r=>r.json());
+  const order = resp.route.map(p => p.id);
+  document.getElementById('routeResult').innerText = 'Optimized order: ' + order.join(' -> ');
+});
+
+setInterval(()=>{ if(rescuer) { loadListingsOnMap(); loadMyPickups(); } }, 8000);
+loadListingsOnMap();
+</script>
+</body>
+</html>
