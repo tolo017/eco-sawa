@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EcoSawa — Last-Mile Food Rescue</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <script> const API_BASE = 'http://localhost:4000/api'; </script>
+</head>
+<body>
+  <div class="container">
+    <div class="card header">
+      <div>
+        <h2>EcoSawa</h2>
+        <div class="small">Turn food surplus into resource — real-time pickups</div>
+      </div>
+      <div>
+        <a href="donor.html" class="btn">Donor</a>
+        <a href="rescuer.html" class="btn secondary">Rescuer</a>
+      </div>
+    </div>
+
+    <div class="card" id="impactCard">
+      <h3>Impact</h3>
+      <div id="impact">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h3>Available Pickups</h3>
+      <div id="listings">Loading...</div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e=>console.log('SW failed',e));
+    async function loadImpact(){
+      const r = await fetch(API_BASE + '/impact').then(r=>r.json());
+      const imp = r.impact;
+      document.getElementById('impact').innerHTML = `Total Food Diverted: <strong>${imp.totalKg} kg</strong> | Pickups Today: <strong>${imp.pickupsToday}</strong>`;
+    }
+    async function loadListings(){
+      const r = await fetch(API_BASE + '/listings').then(r=>r.json());
+      const container = document.getElementById('listings');
+      container.innerHTML = '';
+      if(!r.listings.length) container.innerHTML = '<div class="small">No active pickups</div>';
+      r.listings.forEach(l=>{
+        const el = document.createElement('div');
+        el.className='listing';
+        const left = document.createElement('div');
+        left.innerHTML = `<div><strong>${l.foodType}</strong> — ${l.quantityKg}kg <span class="small">(${l.category})</span></div><div class="small">${l.address || 'No address'}</div>`;
+        const right = document.createElement('div');
+        const tag = document.createElement('span');
+        tag.className = 'tag ' + (l.urgencyColor || 'green');
+        tag.innerText = l.perishabilityTag || '';
+        right.appendChild(tag);
+        el.appendChild(left);
+        el.appendChild(right);
+        container.appendChild(el);
+      });
+    }
+    loadImpact(); loadListings();
+    setInterval(()=>{ loadImpact(); loadListings(); }, 8000);
+  </script>
+</body>
+</html>
