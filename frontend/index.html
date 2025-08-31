@@ -8,6 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <script> const API_BASE = 'http://localhost:4000/api'; </script>
   <script src="auth.js"></script>
+  <script src="auth-ui.js"></script>
 </head>
 <body>
   <div class="container">
@@ -70,35 +71,37 @@
 
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
 const el = id => document.getElementById(id);
 
 function renderProfileUI(){
   const t = localStorage.getItem('eco_token');
   const area = el('profileArea');
-  if (!t) area.innerText = 'Not signed in';
-  else area.innerText = 'Signed in';
+  if (!t) {
+    area.innerText = 'Not signed in';
+    el('openAuth').innerText = 'Sign In / Register';
+  } else {
+    area.innerText = 'Signed in';
+    el('openAuth').innerText = 'Account';
+  }
 }
 renderProfileUI();
 
-async function openAuthPrompt(){
-  const mode = prompt('Type "login" or "register"').trim();
-  if (!mode) return;
-  if (mode === 'register') {
-    const name = prompt('Name:') || 'User';
-    const email = prompt('Email:');
-    const pwd = prompt('Password:');
-    const role = prompt('Role (donor/rescuer):') || 'rescuer';
-    const r = await register(name,email,pwd,role);
-    if (r.token) { alert('Registered'); renderProfileUI(); }
-    else alert('Error: ' + (r.error || JSON.stringify(r)));
-  } else {
-    const email = prompt('Email:');
-    const pwd = prompt('Password:');
-    const r = await login(email,pwd);
-    if (r.token) { alert('Logged in'); renderProfileUI(); initPushSubscription(); }
-    else alert('Error: ' + (r.error || JSON.stringify(r)));
+document.getElementById('openAuth').addEventListener('click', () => {
+  const t = localStorage.getItem('eco_token');
+  if (!t) EcoAuthUI.showLogin();
+  else {
+    // simple account actions
+    const choice = prompt('Type "logout" to sign out, or "register" to create account');
+    if (choice === 'logout') { EcoAuthUI.logout(); renderProfileUI(); }
+    if (choice === 'register') EcoAuthUI.showRegister();
   }
-}
+});
+
+window.addEventListener('eco:auth:changed', ()=> {
+  renderProfileUI();
+  if (localStorage.getItem('eco_token')) initPushSubscription().catch(()=>{});
+});
 
 async function loadImpact(){
   const r = await fetch(API_BASE + '/impact').then(r=>r.json()).catch(()=>null);
@@ -136,7 +139,6 @@ el('btnRefresh').addEventListener('click', ()=>{ loadImpact(); loadAvailable(); 
 el('btnCreateListing').addEventListener('click', ()=>{ location.href='donor.html'; });
 el('btnRescuer').addEventListener('click', ()=>{ location.href='rescuer.html'; });
 el('goDonor').addEventListener('click', ()=>{ location.href='donor.html'; });
-document.getElementById('openAuth').addEventListener('click', openAuthPrompt);
 
 async function initPushSubscription(){
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
