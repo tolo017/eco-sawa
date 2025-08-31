@@ -17,8 +17,8 @@ async function init() {
     intasend_bookings: [],
     impact: { day: new Date().toISOString().slice(0,10), totalKg: 0, pickups: 0 }
   };
-  if (!db.data.impact) db.data.impact = { day: new Date().toISOString().slice(0,10), totalKg: 0, pickups: 0 };
-  await db.write();
+
+  await db.write();  // Ensure this updates the JSON file with the default structure if it was missing.
 }
 
 module.exports = { db, init };
