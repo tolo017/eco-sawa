@@ -1,0 +1,17 @@
+/* styles.css - minimal responsive */
+body {font-family:system-ui, -apple-system, Roboto, "Helvetica Neue", Arial; margin:0; padding:0; background:#f7f7f8; color:#111}
+.container{max-width:980px;margin:18px auto;padding:18px}
+.header{display:flex;justify-content:space-between;align-items:center}
+.card{background:white;padding:14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.06);margin-bottom:12px}
+.btn{background:#1a7df0;color:white;padding:8px 12px;border-radius:6px;border:none;cursor:pointer}
+.btn.secondary{background:#08a04b}
+.tag{display:inline-block;padding:4px 8px;border-radius:6px;font-weight:600}
+.red{background:#ffdddd;color:#aa0000}
+.orange{background:#fff4e0;color:#b45a00}
+.green{background:#eaffef;color:#0a7f3a}
+.listing{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #eee}
+.small{font-size:0.85rem;color:#666}
+input, select {padding:6px;border:1px solid #ddd;border-radius:6px}
+label {font-weight:600}
+#map {height:60vh;border-radius:8px}
+.qr {max-width:200px;display:block;margin-top:8px}
