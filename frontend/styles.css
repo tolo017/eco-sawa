@@ -1,17 +1,66 @@
-/* styles.css - minimal responsive */
-body {font-family:system-ui, -apple-system, Roboto, "Helvetica Neue", Arial; margin:0; padding:0; background:#f7f7f8; color:#111}
-.container{max-width:980px;margin:18px auto;padding:18px}
-.header{display:flex;justify-content:space-between;align-items:center}
-.card{background:white;padding:14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.06);margin-bottom:12px}
-.btn{background:#1a7df0;color:white;padding:8px 12px;border-radius:6px;border:none;cursor:pointer}
-.btn.secondary{background:#08a04b}
-.tag{display:inline-block;padding:4px 8px;border-radius:6px;font-weight:600}
-.red{background:#ffdddd;color:#aa0000}
-.orange{background:#fff4e0;color:#b45a00}
-.green{background:#eaffef;color:#0a7f3a}
-.listing{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #eee}
-.small{font-size:0.85rem;color:#666}
-input, select {padding:6px;border:1px solid #ddd;border-radius:6px}
-label {font-weight:600}
-#map {height:60vh;border-radius:8px}
-.qr {max-width:200px;display:block;margin-top:8px}
+/* styles.css - upgraded UI */
+:root{
+  --bg:#f4f7fb;
+  --card:#ffffff;
+  --primary:#1a7df0;
+  --accent:#08a04b;
+  --muted:#6b7280;
+  --danger:#ef4444;
+  --glass: rgba(255,255,255,0.7);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: linear-gradient(180deg,#f7fbfe 0%, var(--bg) 100%);
+  color:#0f172a;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  padding-bottom:60px;
+}
+
+.container{max-width:1100px;margin:18px auto;padding:18px}
+.app-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--primary),#3fb0ff);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+.app-actions{display:flex;gap:8px;align-items:center}
+
+.card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(11,26,50,0.06);}
+
+.grid{display:grid;grid-template-columns:1fr 380px;gap:16px}
+@media (max-width:980px){ .grid{grid-template-columns:1fr} }
+
+.kpi-row{display:flex;gap:12px;align-items:stretch}
+.kpi{flex:1;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));display:flex;flex-direction:column;justify-content:center}
+.kpi .num{font-size:1.6rem;font-weight:700}
+.kpi .label{font-size:0.85rem;color:var(--muted)}
+
+.btn{background:var(--primary);color:white;padding:10px 12px;border-radius:10px;border:none;cursor:pointer;font-weight:600}
+.btn.ghost{background:transparent;color:var(--primary);border:1px solid rgba(26,125,240,0.12)}
+.btn.alt{background:var(--accent)}
+.small{font-size:0.85rem;color:var(--muted)}
+.section-title{font-size:1.05rem;margin-bottom:8px;font-weight:700}
+
+.listing{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:10px;border:1px solid #eef2ff;background:linear-gradient(180deg,#fff,#fbfdff);margin-bottom:8px}
+.listing .left{display:flex;gap:12px;align-items:center}
+.pill{padding:6px 8px;border-radius:999px;font-weight:700;font-size:0.9rem}
+.pill.red{background:#fff0f0;color:var(--danger);border:1px solid rgba(239,68,68,0.06)}
+.pill.orange{background:#fff8ed;color:#b45309}
+.pill.green{background:#effcf0;color:var(--accent)}
+
+.input, input, select {padding:8px;border-radius:8px;border:1px solid #e6eef9;width:100%}
+.form-row{display:flex;gap:8px}
+.form-row .col{flex:1}
+
+.map-card{height:360px;border-radius:12px;overflow:hidden}
+#map{width:100%;height:100%}
+
+.profile-bubble{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:var(--glass);border:1px solid rgba(10,20,40,0.04)}
+.small-muted{font-size:0.82rem;color:#7c8799}
+
+/* Responsive footer-like action */
+.footer-actions{position:fixed;left:0;right:0;bottom:10px;display:flex;justify-content:center;pointer-events:none}
+.footer-actions .btn{pointer-events:all}
+.qr{max-width:200px;margin-top:8px;border-radius:8px}
