@@ -166,6 +166,24 @@ el('showMyListings').addEventListener('click', loadMyListings);
 
 loadMyListings();
 window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyListings(); });
+document.addEventListener('click', function(e){
+  const el = e.target;
+  if(el.matches && el.matches('.view-btn')){
+    // sample behavior: toggle details above/below listing
+    const listing = el.closest('.listing');
+    if(!listing) return;
+    let details = listing.querySelector('.listing-details');
+    if(!details){
+      details = document.createElement('div');
+      details.className = 'listing-details small muted';
+      details.style.marginTop = '6px';
+      details.innerText = 'More details (demo): address, donor contact, pickup token (if any).';
+      listing.appendChild(details);
+    } else {
+      details.remove();
+    }
+  }
+});
 </script>
 </body>
 </html>
