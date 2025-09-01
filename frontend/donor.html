@@ -1,26 +1,26 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>EcoSawa — Donor Dashboard</title>
 <link rel="stylesheet" href="styles.css" />
 <link rel="manifest" href="manifest.json" />
 <script> const API_BASE = '/api'; </script>
 <script src="auth.js"></script>
 <script src="auth-ui.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 <div class="container">
   <div class="app-header">
-    <div class="brand">
-      <div class="logo">ES</div>
-      <div>
-        <div style="font-weight:800">Donor Dashboard</div>
-        <div class="small-muted">Create listings & manage pickups</div>
-      </div>
+    <div class="brand"><div class="logo">ES</div>
+      <div><div style="font-weight:800">Donor Dashboard</div><div class="small-muted">Create surplus listing</div></div>
     </div>
     <div class="app-actions">
-      <div id="profileArea" class="profile-bubble small-muted"></div>
+      <div id="profileArea" class="profile-bubble small-muted">Not signed in</div>
+      <button class="btn ghost" id="signinBtn">Sign in / Register</button>
+      <button class="btn ghost" id="signoutBtn" style="display:none">Sign out</button>
       <button class="btn ghost" id="backHome">Home</button>
     </div>
   </div>
@@ -29,160 +29,169 @@
     <div>
       <div class="card">
         <div class="section-title">Create Listing</div>
-        <div class="small">Fill details & set pickup schedule</div>
-        <div style="margin-top:12px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input id="foodType" placeholder="Food type (e.g. Vegetables)" />
+          <input id="quantityKg" type="number" placeholder="Quantity (kg)" />
+          <select id="perishabilityTag">
+            <option>Non-perishable</option>
+            <option>Fresh</option>
+            <option>Perishable</option>
+          </select>
+          <input id="address" placeholder="Address (optional)" />
           <div style="display:flex;gap:8px">
-            <div class="col" style="flex:1">
-              <label>Food type</label><input id="foodType" class="input" />
-            </div>
-            <div style="width:120px">
-              <label>Qty (kg)</label><input id="quantity" class="input" type="number" value="5" />
-            </div>
+            <input id="lat" placeholder="Lat" />
+            <input id="lon" placeholder="Lon" />
+            <button id="pickOnMap" class="btn ghost">Pick on map</button>
           </div>
-          <div style="margin-top:8px" class="form-row">
-            <div class="col">
-              <label>Category</label>
-              <select id="category" class="input"><option>Prepared</option><option>Produce</option><option>Packaged</option></select>
-            </div>
-            <div style="width:180px">
-              <label>Perishability</label>
-              <select id="perishabilityTag" class="input"><option>Perishable - 2hrs</option><option>Stable - 24hrs</option><option>Non-Perishable</option></select>
-            </div>
+          <div style="display:flex;gap:8px">
+            <button id="createListingBtn" class="btn">Create Listing</button>
+            <button id="showMyListings" class="btn ghost">Show My Listings</button>
           </div>
-
-          <div style="margin-top:8px">
-            <label>Pickup window start</label>
-            <input id="pickupStart" type="datetime-local" class="input" />
-            <div style="height:8px"></div>
-            <label>Pickup window end</label>
-            <input id="pickupEnd" type="datetime-local" class="input" />
-          </div>
-
-          <div style="margin-top:8px">
-            <label>Address</label>
-            <input id="address" class="input" />
-          </div>
-
-          <div style="margin-top:12px;display:flex;gap:8px">
-            <button class="btn" id="createListingBtn">List Pickup</button>
-            <button class="btn ghost" id="showMyListings">My Listings</button>
-          </div>
-
-          <div id="createdQR" style="margin-top:12px"></div>
+          <div id="createResult" class="small muted"></div>
         </div>
       </div>
 
       <div class="card" style="margin-top:12px">
         <div class="section-title">My Listings</div>
-        <div id="myListings">No listings yet</div>
+        <div id="myListings">Loading…</div>
       </div>
     </div>
 
     <div>
       <div class="card">
-        <div class="section-title">Reputation & Impact</div>
-        <div id="repBlock">
-          <div class="small">Reputation: <strong id="repScore">—</strong></div>
-          <div style="height:12px"></div>
-          <div class="small">Impact</div>
-          <div style="margin-top:8px"><div class="small" id="impactMini">—</div></div>
-        </div>
-      </div>
-
-      <div class="card map-card" style="margin-top:12px">
-        <div class="section-title">Map — quick locate</div>
-        <div id="map" style="height:240px"></div>
+        <div class="section-title">Map — pick location (Nairobi / Kiambu)</div>
+        <div id="map" style="height:420px"></div>
       </div>
     </div>
   </div>
 </div>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-const el = id => document.getElementById(id);
+document.addEventListener('DOMContentLoaded', ()=> {
+  const el = id => document.getElementById(id);
 
-function renderProfile(){
-  const t = localStorage.getItem('eco_token');
-  el('profileArea').innerText = t ? 'Signed in' : 'Not signed in';
-}
-renderProfile();
-
-async function ensureDonorAuth(){
-  if (!localStorage.getItem('eco_token')) {
-    EcoAuthUI.showLogin();
-    return false;
+  function renderProfile(){
+    const t = localStorage.getItem('eco_token');
+    const name = localStorage.getItem('eco_profile_name') || '';
+    el('profileArea').innerText = t ? (name + ' (Donor)') : 'Not signed in';
+    el('signinBtn').style.display = t ? 'none' : 'inline-block';
+    el('signoutBtn').style.display = t ? 'inline-block' : 'none';
   }
-  return true;
-}
+  renderProfile();
 
-const center = [-1.28333, 36.81667];
-const map = L.map('map').setView(center, 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  el('signinBtn').addEventListener('click', ()=> EcoAuthUI.showLogin());
+  el('signoutBtn').addEventListener('click', ()=> { EcoAuthUI.signOut(); renderProfile(); loadMyListings(); });
 
-el('createListingBtn').addEventListener('click', async ()=>{
-  const ok = await ensureDonorAuth();
-  if (!ok) return;
-  const token = localStorage.getItem('eco_token');
-  const payload = {
-    donorId: 'donor_' + Math.random().toString(36).slice(2,8),
-    foodType: el('foodType').value || 'Surplus',
-    quantityKg: Number(el('quantity').value) || 0,
-    category: el('category').value,
-    perishabilityTag: el('perishabilityTag').value,
-    location: { lat: (map.getCenter().lat || 0), lon: (map.getCenter().lng || 0), address: el('address').value || '' },
-    timeWindow: (el('pickupStart').value && el('pickupEnd').value) ? (el('pickupStart').value + '/' + el('pickupEnd').value) : ''
-  };
-  const r = await fetch(API_BASE + '/listings', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + token}, body: JSON.stringify(payload) }).then(r=>r.json());
-  if(r.ok){
-    el('createdQR').innerHTML = `<div class="small">Listing created — ID: ${r.listing.id}</div><img class="qr" src="${r.listing.qrData}" /><div class="small">Token: <code>${r.listing.qrToken}</code></div>`;
-    loadMyListings();
-  } else alert('Error: ' + (r.error || JSON.stringify(r)));
-});
+  el('backHome').addEventListener('click', ()=> location.href='index.html');
 
-async function loadMyListings(){
-  const all = await fetch(API_BASE + '/listings/all').then(r=>r.json()).then(d=>d.listings||[]);
-  const mine = all.filter(l => l.donorId && l.donorId.startsWith('donor_'));
-  const c = el('myListings'); c.innerHTML='';
-  if(!mine.length) { c.innerHTML = '<div class="small">No listings</div>'; return; }
-  mine.forEach(l => {
-    const d = document.createElement('div'); d.className='listing';
-    d.innerHTML = `<div><div style="font-weight:700">${l.foodType} — ${l.quantityKg}kg</div><div class="small">${l.address || ''} ${l.timeWindow ? ' | ' + l.timeWindow : ''}</div></div>`;
-    const right = document.createElement('div');
-    const rep = document.createElement('div'); rep.className='small'; rep.innerText = `Status: ${l.status}`;
-    right.appendChild(rep);
-    d.appendChild(right);
-    c.appendChild(d);
+  // Map
+  const center = [-1.28333, 36.81667];
+  const map = L.map('map').setView(center, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  let pickMarker = null;
+  map.on('click', function(e){
+    const { lat, lng } = e.latlng;
+    el('lat').value = lat.toFixed(6);
+    el('lon').value = lng.toFixed(6);
+    if(pickMarker) pickMarker.setLatLng(e.latlng);
+    else pickMarker = L.marker(e.latlng).addTo(map);
   });
-  const imp = await fetch(API_BASE + '/impact').then(r=>r.json()).then(x=>x.impact).catch(()=>({ totalKg:0, pickupsToday:0 }));
-  el('repScore').innerText = '—/5';
-  el('impactMini').innerText = `${imp.totalKg} kg diverted | ${imp.pickupsToday} pickups today`;
-}
+  el('pickOnMap').addEventListener('click', ()=> {
+    alert('Click on the map to pick coordinates');
+  });
 
-el('backHome').addEventListener('click', ()=> location.href='index.html');
-el('showMyListings').addEventListener('click', loadMyListings);
-
-loadMyListings();
-window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyListings(); });
-document.addEventListener('click', function(e){
-  const el = e.target;
-  if(el.matches && el.matches('.view-btn')){
-    // sample behavior: toggle details above/below listing
-    const listing = el.closest('.listing');
-    if(!listing) return;
-    let details = listing.querySelector('.listing-details');
-    if(!details){
-      details = document.createElement('div');
-      details.className = 'listing-details small muted';
-      details.style.marginTop = '6px';
-      details.innerText = 'More details (demo): address, donor contact, pickup token (if any).';
-      listing.appendChild(details);
-    } else {
-      details.remove();
+  async function apiPost(path, body){
+    try {
+      const token = localStorage.getItem('eco_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(API_BASE + path, { method:'POST', headers, body: JSON.stringify(body||{}) });
+      return await r.json();
+    } catch(err){
+      return { ok:false, error: String(err) };
     }
   }
+
+  el('createListingBtn').addEventListener('click', async ()=>{
+    const ok = !!localStorage.getItem('eco_token') || confirm('You are not signed in — continue as demo donor?');
+    if(!ok) return;
+    const payload = {
+      donorId: (localStorage.getItem('eco_token') ? ('donor_' + (localStorage.getItem('eco_profile_name')||'user')) : undefined),
+      foodType: el('foodType').value || 'Surplus',
+      quantityKg: Number(el('quantityKg').value) || 0,
+      perishabilityTag: el('perishabilityTag').value || 'Non-perishable',
+      location: {
+        lat: parseFloat(el('lat').value) || undefined,
+        lon: parseFloat(el('lon').value) || undefined,
+        address: el('address').value || ''
+      }
+    };
+    el('createResult').innerText = 'Creating…';
+    const res = await apiPost('/listings', payload);
+    if(res && res.ok){
+      el('createResult').innerHTML = 'Created listing id: ' + res.listing.id + (res.listing.qrToken ? (' — token: ' + res.listing.qrToken) : '');
+      if(res.listing.qrData){
+        const img = document.createElement('img'); img.src = res.listing.qrData; img.style.maxWidth='220px'; img.style.display='block'; img.style.marginTop='8px';
+        el('createResult').appendChild(img);
+      }
+      // clear form lightly
+      el('foodType').value=''; el('quantityKg').value=''; el('address').value='';
+      loadMyListings();
+    } else {
+      el('createResult').innerText = 'Create failed: ' + (res && res.error ? res.error : JSON.stringify(res));
+    }
+  });
+
+  async function loadMyListings(){
+    try {
+      const r = await fetch(API_BASE + '/listings/all');
+      const j = await r.json();
+      const all = j.listings || [];
+      const mine = all.filter(l => {
+        // donor created via UI will have donorId starting with 'donor_' or match profile name
+        const myName = localStorage.getItem('eco_profile_name') || '';
+        return !localStorage.getItem('eco_token') ? (String(l.donorId||'').startsWith('donor_')) : (String(l.donorId||'').includes(myName) || String(l.donorId||'').startsWith('donor_') || !l.donorId);
+      });
+      const c = el('myListings'); c.innerHTML = '';
+      if(!mine.length){ c.innerHTML = '<div class="small">No listings</div>'; return; }
+      mine.forEach(l=>{
+        const div = document.createElement('div'); div.className='listing';
+        div.innerHTML = `<div><div style="font-weight:700">${l.foodType} — ${l.quantityKg || 0}kg</div><div class="small">${l.address || ''} ${l.timeWindow ? ' | ' + l.timeWindow : ''}</div></div>`;
+        const right = document.createElement('div');
+        const view = document.createElement('button'); view.className='btn view-btn'; view.innerText='View';
+        view.onclick = ()=> {
+          // show QR token and details
+          const modal = document.createElement('div'); modal.className='card'; modal.style.marginTop='8px';
+          modal.innerHTML = `<div><b>${l.foodType}</b><div class="small">Token: ${l.qrToken || '-'}</div></div>`;
+          if(l.qrToken) {
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><rect width='100%' height='100%' fill='#fff'/><text x='10' y='120' font-size='18' font-family='sans-serif'>${l.qrToken}</text></svg>`;
+            const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+            const img = document.createElement('img'); img.src = dataUrl; img.style.maxWidth='160px'; img.style.display='block'; img.style.marginTop='8px';
+            modal.appendChild(img);
+          }
+          // schedule display
+          const s = document.createElement('div'); s.className='small muted'; s.style.marginTop='8px'; s.innerText = 'Schedule: ' + (l.schedule || 'ASAP');
+          modal.appendChild(s);
+          // replace existing details if any
+          const existing = div.querySelector('.details');
+          if(existing) existing.remove();
+          const details = document.createElement('div'); details.className='details'; details.appendChild(modal);
+          div.appendChild(details);
+        };
+        right.appendChild(view);
+        div.appendChild(right);
+        c.appendChild(div);
+      });
+    } catch(err){
+      el('myListings').innerHTML = '<div class="small">Error loading listings</div>';
+    }
+  }
+
+  el('showMyListings').addEventListener('click', loadMyListings);
+
+  // react to auth changes
+  window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyListings(); });
 });
 </script>
 </body>
