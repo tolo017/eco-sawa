@@ -18,3 +18,25 @@ async function register(name,email,password,role){
   if (r.token) setToken(r.token);
   return r;
 }
+
+// simple auth helper (localStorage)
+(function(){
+  function id() { return 't_' + Date.now().toString(36).slice(2,9); }
+  function getToken(){ return localStorage.getItem('eco_token'); }
+  function getProfile(){ try { return JSON.parse(localStorage.getItem('eco_profile') || '{}'); } catch(e){ return {}; } }
+  function signIn(name, role='donor'){
+    const tk = id();
+    localStorage.setItem('eco_token', tk);
+    localStorage.setItem('eco_profile', JSON.stringify({ name: name || 'Demo User', role }));
+    localStorage.setItem('eco_profile_name', name || 'Demo User');
+    window.dispatchEvent(new Event('eco:auth:changed'));
+    return tk;
+  }
+  function signOut(){
+    localStorage.removeItem('eco_token');
+    localStorage.removeItem('eco_profile');
+    localStorage.removeItem('eco_profile_name');
+    window.dispatchEvent(new Event('eco:auth:changed'));
+  }
+  window.EcoAuth = { getToken, getProfile, signIn, signOut };
+})();

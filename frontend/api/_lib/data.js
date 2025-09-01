@@ -1,6 +1,5 @@
-// shared in-memory demo data for serverless lambdas
+// shared in-memory demo data for serverless lambdas (persist per warm instance)
 const randBetween = (min, max) => Math.random() * (max - min) + min;
-
 function makeListing(i){
   const types = ['Vegetables','Cooked Meals','Fruits','Bread','Dairy'];
   const perTags = ['Fresh','Perishable','Non-perishable'];
@@ -21,14 +20,17 @@ function makeListing(i){
     status: 'available',
     qrToken: 'IS_' + Math.random().toString(36).slice(2,9),
     claimedBy: null,
-    confirmed: false
+    confirmed: false,
+    schedule: null
   };
 }
 
-// keep across invocations when runtime reuses lambda instance
 if (!global.__eco_listings) {
   global.__eco_listings = Array.from({length:12}, (_,i)=>makeListing(i+1));
 }
+if (!global.__eco_transactions) global.__eco_transactions = [];
+const makeTxId = () => 'tx_' + Date.now().toString(36).slice(2,9);
+
 module.exports = {
   getListings: () => global.__eco_listings.filter(l => l.status !== 'deleted'),
   getAll: () => global.__eco_listings,
@@ -48,7 +50,8 @@ module.exports = {
       status: 'available',
       qrToken: 'IS_' + Math.random().toString(36).slice(2,9),
       claimedBy: null,
-      confirmed: false
+      confirmed: false,
+      schedule: null
     };
     global.__eco_listings.push(listing);
     return listing;
@@ -59,19 +62,28 @@ module.exports = {
     if(l.claimedBy) return { ok:false, error:'Already claimed' };
     l.claimedBy = token || ('rescuer_' + Date.now().toString(36).slice(2,6));
     l.status = 'claimed';
-    return { ok:true, claimed:true };
+    return { ok:true, claimed:true, listing: l };
   },
-  confirmListingWithToken: (id, token) => {
+  scheduleListing: (id, scheduleStr) => {
     const l = global.__eco_listings.find(x=>x.id===id);
     if(!l) return { ok:false, error:'Not found' };
-    if(l.qrToken) {
-      if(token && token === l.qrToken) {
+    l.schedule = scheduleStr;
+    return { ok:true, listing: l };
+  },
+  confirmListingWithToken: (id, token, rescuerId){
+    const l = global.__eco_listings.find(x=>x.id===id);
+    if(!l) return { ok:false, error:'Not found' };
+    if(l.qrToken){
+      if(token && token === l.qrToken){
         l.confirmed = true; l.status = 'collected';
-        return { ok:true };
       } else return { ok:false, error:'Invalid token' };
     } else {
       l.confirmed = true; l.status='collected';
-      return { ok:true };
     }
-  }
+    // record a simple transaction (simulated InstaSend)
+    const tx = { id: makeTxId(), listingId: l.id, donorId: l.donorId, rescuerId: rescuerId || l.claimedBy || 'unknown', tokenUsed: token || null, time: new Date().toISOString(), amount: 0 };
+    global.__eco_transactions.push(tx);
+    return { ok:true, transaction: tx };
+  },
+  getTransactions: () => global.__eco_transactions
 };

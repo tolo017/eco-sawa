@@ -82,3 +82,18 @@
   window.addEventListener('keydown', (e)=> { if(e.key === 'Escape') { const b = document.getElementById('esAuthBackdrop'); if(b) b.style.display='none'; } });
 
 })();
+
+// minimal login/register UI shim (non-blocking)
+(function(){
+  window.EcoAuthUI = {
+    showLogin: function(){
+      const name = prompt('Sign in / register - enter your name:', localStorage.getItem('eco_profile_name') || 'Demo User');
+      if(!name) return;
+      // ask role quickly
+      const role = prompt('Role: rescuer or donor?', (localStorage.getItem('eco_profile') ? (JSON.parse(localStorage.getItem('eco_profile')||'{}').role || 'donor') : 'donor'));
+      window.EcoAuth.signIn(name, (role && role.toLowerCase && role.toLowerCase()==='rescuer') ? 'rescuer' : 'donor');
+      alert('Signed in as ' + (localStorage.getItem('eco_profile_name') || 'Demo User'));
+    },
+    signOut: function(){ window.EcoAuth.signOut(); }
+  };
+})();
