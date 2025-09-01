@@ -8,6 +8,8 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script> const API_BASE = '/api'; </script>
+<script src="auth.js"></script>
+<script src="auth-ui.js"></script>
 </head>
 <body>
 <div class="container">
@@ -16,6 +18,8 @@
     <div class="app-actions">
       <div id="profileArea" class="profile-bubble small-muted"></div>
       <button class="btn ghost" id="backHome">Home</button>
+      <button class="btn ghost" id="signinBtn">Sign in</button>
+      <button class="btn ghost" id="signoutBtn" style="display:none">Sign out</button>
     </div>
   </div>
 
@@ -36,135 +40,214 @@
       <div class="card map-card">
         <div class="section-title">Map — Nairobi / Kiambu</div>
         <div id="map" style="height:320px"></div>
-        <div style="margin-top:8px"><button id="simBtn" class="btn ghost">Simulate pickups</button><button id="paySimBtn" class="btn ghost">Toggle InstaSend simulation</button></div>
+        <div style="margin-top:8px">
+          <button id="simBtn" class="btn ghost">Simulate pickups</button>
+          <button id="paySimBtn" class="btn ghost">Toggle InstaSend simulation</button>
+        </div>
         <div style="margin-top:8px" id="routeResult"></div>
+        <div style="margin-top:12px">
+          <div class="section-title">Recent Transactions</div>
+          <div id="transactionsPanel" class="small">Loading…</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-const el = id => document.getElementById(id);
-function renderProfile(){
-  const t = localStorage.getItem('eco_token');
-  el('profileArea').innerText = t ? (localStorage.getItem('eco_profile_name') || 'Signed in') : 'Not signed in';
-}
-renderProfile();
+document.addEventListener('DOMContentLoaded', () => {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  const el = id => document.getElementById(id);
 
-const nairobi = [-1.28333, 36.81667];
-const map = L.map('map').setView(nairobi, 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-let localSim = [];
-let useSim = false;
-function randBetween(min,max){return Math.random()*(max-min)+min;}
-function genSim(n=8){
-  const types=['Vegetables','Cooked Meals','Fruits','Bread','Dairy'];
-  const per=['Fresh','Perishable','Non-perishable'];
-  const urg=['green','orange','red'];
-  return Array.from({length:n},(_,i)=>({
-    id:'sim-'+Date.now()+'-'+i,
-    foodType: types[i%types.length],
-    quantityKg: Math.ceil(randBetween(1,30)),
-    perishabilityTag: per[i%per.length],
-    urgencyColor: urg[i%urg.length],
-    lat: randBetween(-1.55,-0.95),
-    lon: randBetween(36.55,37.35),
-    address: `Simulated ${i+1}, Nairobi/Kiambu`,
-    timeWindow: 'ASAP'
-  }));
-}
-
-document.getElementById('simBtn').addEventListener('click', ()=>{ localSim = genSim(10); useSim = true; loadAvailable(); alert('Simulated pickups generated'); });
-document.getElementById('paySimBtn').addEventListener('click', ()=>{ const v = localStorage.getItem('ecos_im_instasim')==='1'; localStorage.setItem('ecos_im_instasim', v?'0':'1'); alert('InstaSend sim ' + (v?'disabled':'enabled')); });
-
-let markers = L.layerGroup().addTo(map);
-
-async function apiGet(path){
-  try {
-    const r = await fetch(API_BASE + path);
-    if(!r.ok) throw new Error('bad');
-    useSim = false;
-    return r.json();
-  } catch(e){
-    useSim = true;
-    return { listings: localSim };
+  function renderProfile(){
+    const t = localStorage.getItem('eco_token');
+    const name = localStorage.getItem('eco_profile_name') || '';
+    el('profileArea').innerText = t ? (`${name} (Rescuer)` || 'Signed in') : 'Not signed in';
+    el('signinBtn').style.display = t ? 'none' : 'inline-block';
+    el('signoutBtn').style.display = t ? 'inline-block' : 'none';
   }
-}
+  renderProfile();
 
-async function apiPost(path, body){
-  try {
-    const r = await fetch(API_BASE + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{}) });
-    return r.json();
-  } catch(e){
-    // simulate minimal responses
-    if(path.endsWith('/claim')) return { ok:true, claimed:true };
-    return { ok:false, error:'offline' };
+  document.getElementById('signinBtn').addEventListener('click', ()=> EcoAuthUI.showLogin());
+  document.getElementById('signoutBtn').addEventListener('click', ()=> { EcoAuthUI.signOut(); renderProfile(); loadAvailable(); loadMyPickups(); loadTransactions(); });
+
+  const nairobi = [-1.28333, 36.81667];
+  const map = L.map('map').setView(nairobi, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  const bounds = L.latLngBounds([ -1.6, 36.5 ], [ -0.9, 37.4 ]);
+  map.setMaxBounds(bounds);
+
+  let localSimListings = [];
+  let useLocalSim = false;
+  function randBetween(min, max){ return Math.random() * (max - min) + min; }
+  function genSim(n=8){
+    const types=['Vegetables','Cooked Meals','Fruits','Bread','Dairy'];
+    const per=['Fresh','Perishable','Non-perishable'];
+    const urg=['green','orange','red'];
+    const arr = [];
+    for(let i=0;i<n;i++){
+      arr.push({
+        id: 'sim-'+Date.now()+'-'+i,
+        lat: randBetween(-1.55, -0.95),
+        lon: randBetween(36.55, 37.35),
+        foodType: types[i % types.length],
+        quantityKg: Math.ceil(randBetween(1,30)),
+        perishabilityTag: per[i % per.length],
+        urgencyColor: urg[i % urg.length],
+        address: `Simulated address ${i+1}, Nairobi/Kiambu`,
+        timeWindow: 'ASAP'
+      });
+    }
+    return arr;
   }
-}
 
-async function loadAvailable(){
-  const r = await apiGet('/listings').catch(()=>({ listings: [] }));
-  const list = r.listings || [];
-  const c = el('availableList'); c.innerHTML = '';
-  markers.clearLayers();
-  if(!list.length) { c.innerHTML = '<div class="small">No pickups available</div>'; return; }
-  list.forEach(l=>{
-    const div = document.createElement('div'); div.className='listing';
-    div.innerHTML = `<div><b>${l.foodType}</b> — ${l.quantityKg}kg<br/><span class="small">${l.address}</span></div>`;
-    const btn = document.createElement('button'); btn.className='btn'; btn.innerText='Accept & Schedule';
-    btn.onclick = ()=> acceptAndSchedule(l);
-    div.appendChild(btn);
-    c.appendChild(div);
-    const color = l.urgencyColor==='red'? '#ff2b2b' : (l.urgencyColor==='orange'?'#ff9f1c':'#28a745');
-    const m = L.circleMarker([l.lat,l.lon], { color, radius:8, fillColor: color, fillOpacity:0.8 }).addTo(markers);
-    m.bindPopup(`<b>${l.foodType}</b><br/>${l.quantityKg}kg — ${l.perishabilityTag}<br/><button onclick="window.open('/rescuer.html','_self')">Open</button>`);
-  });
-}
+  el('simBtn').addEventListener('click', ()=>{ localSimListings = genSim(10); useLocalSim = true; loadAvailable(); alert('Simulated pickups generated'); });
+  el('paySimBtn').addEventListener('click', ()=>{ const v = localStorage.getItem('ecos_im_instasim')==='1'; localStorage.setItem('ecos_im_instasim', v?'0':'1'); alert('InstaSend sim ' + (v?'disabled':'enabled')); });
 
-window.acceptFromMap = async function(id){
-  const claim = await apiPost('/listings/' + id + '/claim', {});
-  if(claim.ok){ alert('Claimed'); loadMyPickups(); loadAvailable(); } else alert('Error:' + JSON.stringify(claim));
-};
+  let markers = L.layerGroup().addTo(map);
 
-async function acceptAndSchedule(listing){
-  const claim = await apiPost('/listings/' + listing.id + '/claim', {});
-  if(!claim.ok) { alert('Could not claim'); return; }
-  if(useSim && localStorage.getItem('ecos_im_instasim')==='1'){ listing._simToken = 'IS_' + Math.random().toString(36).slice(2,9); alert('InstaSend token (sim): ' + listing._simToken); }
-  const sched = prompt('Propose pickup time (YYYY-MM-DDTHH:MM) or leave blank for ASAP:');
-  const key = 'eco_schedules'; const schedules = JSON.parse(localStorage.getItem(key)||'{}'); if(sched) { schedules[listing.id]=sched; localStorage.setItem(key, JSON.stringify(schedules)); }
-  loadMyPickups(); loadAvailable();
-}
+  async function apiGet(path){
+    try {
+      const r = await fetch(API_BASE + path);
+      if(!r.ok) throw new Error('bad');
+      useLocalSim = false;
+      return await r.json();
+    } catch (err){
+      useLocalSim = true;
+      return { listings: localSimListings || [] };
+    }
+  }
 
-async function loadMyPickups(){
-  const all = await apiGet('/listings/all').then(d=>d.listings||[]).catch(()=>[]);
-  // treat claimedBy not null as mine for demo
-  const mine = all.filter(x=> x.claimedBy || x.claimedBy===null ? (x.claimedBy==='demo-rescuer' || x.claimedBy) : false);
-  const c = el('myPickups'); c.innerHTML = '';
-  if(!mine.length){ c.innerHTML = '<div class="small">No claimed pickups</div>'; return; }
-  const schedules = JSON.parse(localStorage.getItem('eco_schedules')||'{}');
-  mine.forEach(m=>{
-    const d = document.createElement('div'); d.className='listing';
-    d.innerHTML = `<div><b>${m.foodType}</b><div class="small">${m.address || ''} | Scheduled: ${schedules[m.id]||'ASAP'}</div></div>`;
-    const btn = document.createElement('button'); btn.className='btn'; btn.innerText='Confirm (QR)'; btn.onclick = ()=> confirmWithQR(m);
-    d.appendChild(btn);
-    c.appendChild(d);
-  });
-}
+  async function apiPost(path, body){
+    try {
+      const token = localStorage.getItem('eco_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if(token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(API_BASE + path, { method:'POST', headers, body: JSON.stringify(body||{}) });
+      return await r.json();
+    } catch (err){
+      // fallback simulation responses
+      if(path.endsWith('/claim')) return { ok:true, claimed:true };
+      if(path.endsWith('/schedule')) return { ok:true };
+      if(path.endsWith('/confirm-qr')) return { ok:true };
+      return { ok:false, error:'offline' };
+    }
+  }
 
-async function confirmWithQR(listing){
-  const tk = prompt('Paste QR token from donor (or token shown on donor page)');
-  if(!tk) return;
-  const r = await apiPost('/listings/' + listing.id + '/confirm-qr', { token: tk });
-  if(r.ok){ alert('Pickup confirmed'); loadMyPickups(); loadAvailable(); } else alert('Error:' + (r.error||JSON.stringify(r)));
-}
+  async function loadAvailable(){
+    const r = await apiGet('/listings').catch(()=>({ listings: [] }));
+    const listings = r.listings || [];
+    const c = el('availableList'); c.innerHTML = '';
+    markers.clearLayers();
+    if(!listings.length){ c.innerHTML = '<div class="small">No pickups available</div>'; return; }
+    listings.forEach(l=>{
+      const color = l.urgencyColor === 'red' ? '#ff2b2b' : (l.urgencyColor === 'orange' ? '#ff9f1c' : '#28a745');
+      const div = document.createElement('div'); div.className='listing';
+      div.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><div><div class="pill ${l.urgencyColor}">${l.perishabilityTag||''}</div></div><div><div style="font-weight:700">${l.foodType || ''} — ${l.quantityKg || ''}kg</div><div class="small">${l.address || ''} ${l.timeWindow ? ' | ' + l.timeWindow : ''}</div></div></div>`;
+      const right = document.createElement('div');
+      const btn = document.createElement('button'); btn.className='btn'; btn.innerText='Accept & Schedule';
+      btn.onclick = ()=> acceptAndSchedule(l);
+      right.appendChild(btn);
+      div.appendChild(right);
+      c.appendChild(div);
 
-el('backHome').addEventListener('click', ()=> location.href='index.html');
+      if(l.lat && l.lon){
+        const marker = L.circleMarker([l.lat, l.lon], { color, radius:8, fillColor: color, fillOpacity:0.8 }).addTo(markers);
+        marker.bindPopup(`<b>${l.foodType}</b><br/>${l.quantityKg}kg — ${l.perishabilityTag || ''}<br/><div style="margin-top:6px"><button onclick="acceptFromMap('${l.id}')">Accept & Schedule</button></div>`);
+      }
+    });
+  }
 
-loadAvailable();
-loadMyPickups();
+  window.acceptFromMap = async function(id){
+    const token = localStorage.getItem('eco_token');
+    if(!token){ EcoAuthUI.showLogin(); return; }
+    const claim = await apiPost('/listings/' + id + '/claim', {});
+    if(claim.ok){ alert('Claimed'); await loadMyPickups(); await loadAvailable(); await loadTransactions(); } else alert('Error:' + JSON.stringify(claim));
+  };
+
+  async function acceptAndSchedule(listing){
+    const token = localStorage.getItem('eco_token');
+    if(!token){ EcoAuthUI.showLogin(); return; }
+    const claim = await apiPost('/listings/' + listing.id + '/claim', {});
+    if(!claim.ok){ alert('Could not claim: ' + (claim.error||'unknown')); return; }
+
+    let schedule = prompt('Propose pickup time (YYYY-MM-DDTHH:MM), leave blank for ASAP:');
+    if(schedule === null) schedule = ''; // user cancelled -> treat as blank
+    // POST schedule to serverless schedule endpoint
+    const schedResp = await apiPost('/listings/' + listing.id + '/schedule', { schedule });
+    if(!schedResp.ok){ console.warn('Schedule failed (sim fallback ok):', schedResp); }
+    // if InstaSend simulation enabled, make rescuer request the token from donor (sim)
+    if (useLocalSim && localStorage.getItem('ecos_im_instasim') === '1') {
+      alert('InstaSend simulation enabled: donor will have a token to confirm pickup.');
+    }
+
+    await loadMyPickups();
+    await loadAvailable();
+    await loadTransactions();
+  }
+
+  async function loadMyPickups(){
+    const all = await apiGet('/listings/all').then(d=>d.listings||[]).catch(()=>[]);
+    const token = localStorage.getItem('eco_token');
+    // claim detection: show listings claimed by current token or any claimed ones (for demo)
+    const mine = all.filter(l => l.claimedBy && (token ? l.claimedBy === token : true));
+    const c = el('myPickups'); c.innerHTML='';
+    if(!mine.length){ c.innerHTML = '<div class="small">No claimed pickups</div>'; return; }
+    mine.forEach(m=>{
+      const d = document.createElement('div'); d.className='listing';
+      d.innerHTML = `<div><div style="font-weight:700">${m.foodType}</div><div class="small">${m.address || ''} ${m.timeWindow ? ' | ' + m.timeWindow : ''}</div><div class="small">Scheduled: ${m.schedule || 'ASAP'}</div></div>`;
+      const right = document.createElement('div');
+      const btnConfirm = document.createElement('button'); btnConfirm.className='btn'; btnConfirm.innerText='Confirm (QR)';
+      btnConfirm.onclick = ()=> confirmWithQR(m);
+      right.appendChild(btnConfirm);
+      d.appendChild(right);
+      c.appendChild(d);
+    });
+  }
+
+  async function confirmWithQR(listing){
+    const token = localStorage.getItem('eco_token');
+    if(!token){ EcoAuthUI.showLogin(); return; }
+    const tk = prompt('Paste QR token from donor (or token shown on donor page)');
+    if(!tk) return;
+    const r = await apiPost('/listings/' + listing.id + '/confirm-qr', { token: tk });
+    if(r.ok){ alert('Pickup confirmed'); await loadMyPickups(); await loadAvailable(); await loadTransactions(); }
+    else alert('Error: ' + (r.error || JSON.stringify(r)));
+  }
+
+  async function loadTransactions(){
+    try {
+      const r = await fetch(API_BASE + '/transactions');
+      if(!r.ok) throw new Error('no tx');
+      const j = await r.json();
+      const txs = j.transactions || [];
+      const p = el('transactionsPanel'); p.innerHTML = '';
+      if(!txs.length){ p.innerHTML = '<div class="small">No transactions yet</div>'; return; }
+      txs.slice().reverse().forEach(t=>{
+        const row = document.createElement('div'); row.className='small muted';
+        row.style.marginBottom='6px';
+        row.innerText = `${t.time} — listing:${t.listingId} rescuer:${t.rescuerId} donor:${t.donorId} token:${t.tokenUsed || '-'} `;
+        p.appendChild(row);
+      });
+    } catch (err){
+      // server unavailable — fall back to empty state
+      const p = el('transactionsPanel'); p.innerHTML = '<div class="small">Transactions unavailable (demo)</div>';
+    }
+  }
+
+  el('backHome').addEventListener('click', ()=> location.href='index.html');
+
+  // simple optimize (demo)
+  el('routeResult').innerText = '';
+  // initial data seed for demo mode
+  if (!localSimListings.length) localSimListings = genSim(8);
+
+  window.addEventListener('eco:auth:changed', ()=> { renderProfile(); loadMyPickups(); loadAvailable(); loadTransactions(); });
+
+  //
+});
 </script>
 </body>
 </html>
